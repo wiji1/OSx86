@@ -1,17 +1,16 @@
-use std::env;
+use std::{env, io};
 use std::fs::File;
 use std::io::{Error, Read};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let mut parsed_args = parse_args(args);
+    let mut parsed_args = parse_args(args[1..].to_vec());
 
     if parsed_args.modifiers.is_empty() && parsed_args.char_modifiers.is_empty() {
+        parsed_args.char_modifiers.push('l');
         parsed_args.char_modifiers.push('w');
         parsed_args.char_modifiers.push('c');
-        parsed_args.char_modifiers.push('m');
-        parsed_args.char_modifiers.push('l');
     }
 
     if parsed_args.modifiers.contains(&"version".to_string()) {
@@ -26,21 +25,14 @@ fn main() {
         return;
     }
 
-    let mut content = String::new();
-
-    match parsed_args.file {
-        Some(ref file) => {
-            let file_content = open_file(&file);
-
-            match file_content {
-                Ok(file_content) => content = file_content,
-                Err(err) => panic!("{}", err),
-            }
-        }
+    let content = match parsed_args.file {
+        Some(ref file) => open_file(file).unwrap(),
         None => {
-            panic!("No input file provided")
+            let mut input = String::new();
+            io::stdin().read_to_string(&mut input).unwrap();
+            input
         }
-    }
+    };
 
     let mut output: String = String::new();
     let mut combined_modifiers: Vec<String> = Vec::new();
@@ -55,25 +47,31 @@ fn main() {
         match modifier {
             s if s == "c" || s.contains("bytes") => {
                 output.push_str(format!("{}", &content.bytes().count()).as_str());
-                output.push_str("   ");
+                output.push_str("     ");
             },
             s if s == "m" || s.contains("chars") => {
                 output.push_str(format!("{}",  &content.chars().count()).as_str());
-                output.push_str("   ");
+                output.push_str("     ");
             },
             s if s == "l" || s.contains("lines") => {
                 output.push_str(format!("{}",  &content.lines().count()).as_str());
-                output.push_str("   ");
+                output.push_str("     ");
             }
             s if s == "w" || s.contains("words") => {
                 output.push_str(format!("{}",  &content.split_whitespace().count()).as_str());
-                output.push_str("   ");
+                output.push_str("     ");
+            },
+            s if s == "L" || s.contains("max-line-length") => {
+                output.push_str(format!("{}", get_longest_line_length(&content)).as_str());
+                output.push_str("     ");
             }
             _ => {}
         }
     }
 
-    output.push_str(format!("{}", parsed_args.file.unwrap()).as_str());
+    if parsed_args.file.is_some() {
+        output.push_str(format!("{}", parsed_args.file.unwrap()).as_str());
+    }
     println!("{}", output);
 }
 
@@ -113,6 +111,16 @@ fn open_file(path: &String) -> Result<String, Error> {
     file.read_to_string(&mut contents)?;
 
     Ok(contents)
+}
+
+fn get_longest_line_length(content: &String) -> usize {
+    let mut line_length: usize = 0;
+
+    for line in content.lines() {
+        if line.len() > line_length { line_length = line.len(); }
+    }
+
+    line_length
 }
 
 fn display_version() {
