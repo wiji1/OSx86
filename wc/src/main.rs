@@ -5,7 +5,11 @@ use std::io::{Error, Read};
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let mut parsed_args = parse_args(args[1..].to_vec());
+    let arg_result = parse_args(args[1..].to_vec());
+    let mut parsed_args = match arg_result {
+        Ok(parsed_args) => parsed_args,
+        Err(err) => panic!("{}", err),
+    };
 
     if parsed_args.modifiers.is_empty() && parsed_args.char_modifiers.is_empty() {
         parsed_args.char_modifiers.push('l');
@@ -25,14 +29,18 @@ fn main() {
         return;
     }
 
-    let content = match parsed_args.file {
-        Some(ref file) => open_file(file).unwrap(),
-        None => {
-            let mut input = String::new();
-            io::stdin().read_to_string(&mut input).unwrap();
-            input
+    let mut content = String::new();
+
+    if parsed_args.files.is_empty() {
+        let mut input = String::new();
+        io::stdin().read_to_string(&mut input).unwrap();
+        content = input;
+    } else {
+        for file in &parsed_args.files {
+            content.push_str(&open_file(&file).unwrap());
+            content.push('\n');
         }
-    };
+    }
 
     let mut output: String = String::new();
     let mut combined_modifiers: Vec<String> = Vec::new();
@@ -69,40 +77,44 @@ fn main() {
         }
     }
 
-    if parsed_args.file.is_some() {
-        output.push_str(format!("{}", parsed_args.file.unwrap()).as_str());
+    if parsed_args.files.len() == 1 {
+        output.push_str(format!("{}", parsed_args.files[0]).as_str());
     }
     println!("{}", output);
 }
 
-fn parse_args(args: Vec<String>) -> Arguments {
+fn parse_args(args: Vec<String>) -> Result<Arguments, Error> {
     let mut modifiers: Vec<String> = Vec::new();
     let mut char_modifiers: Vec<char> = Vec::new();
-    let mut file: Option<String> = None;
+    let mut files: Vec<String> = Vec::new();
 
     for arg in args.into_iter() {
         match arg {
+            s if s.starts_with("--files0-from=") => {
+                let content = open_file(&s[14..].to_string())?;
+                content.lines().for_each(|l| files.push(l.to_string()));
+            },
             s if s.starts_with("--") => modifiers.push(s[2..].to_string()),
             s if s.starts_with("-") => {
-                for char in s[1..].chars() {
-                    char_modifiers.push(char);
-                }
+                for char in s[1..].chars() { char_modifiers.push(char); }
+            },
+            s => {
+                if files.len() == 0 { files.push(s.to_string()) }
             }
-            s => file = Some(s.to_string())
         }
     }
 
-    Arguments {
+    Ok(Arguments {
         modifiers,
         char_modifiers,
-        file
-    }
+        files
+    })
 }
 
 struct Arguments {
     modifiers: Vec<String>,
     char_modifiers: Vec<char>,
-    file: Option<String>,
+    files: Vec<String>,
 }
 
 fn open_file(path: &String) -> Result<String, Error> {
@@ -116,9 +128,7 @@ fn open_file(path: &String) -> Result<String, Error> {
 fn get_longest_line_length(content: &String) -> usize {
     let mut line_length: usize = 0;
 
-    for line in content.lines() {
-        if line.len() > line_length { line_length = line.len(); }
-    }
+    for line in content.lines() { if line.len() > line_length { line_length = line.len(); } }
 
     line_length
 }
@@ -128,5 +138,31 @@ fn display_version() {
 }
 
 fn display_help() {
-    print!("Help menu!");
+    print!("
+        Usage: wc [OPTION]... [FILE]...
+          or:  wc [OPTION]... --files0-from=F
+        Print newline, word, and byte counts for each FILE, and a total line if
+        more than one FILE is specified.  A word is a non-zero-length sequence of
+        characters delimited by white space.
+
+        With no FILE, or when FILE is -, read standard input.
+
+        The options below may be used to select which counts are printed, always in
+        the following order: newline, word, character, byte, maximum line length.
+          -c, --bytes            print the byte counts
+          -m, --chars            print the character counts
+          -l, --lines            print the newline counts
+              --files0-from=F    read input from the files specified by
+                                   NUL-terminated names in file F;
+                                   If F is - then read names from standard input
+          -L, --max-line-length  print the maximum display width
+          -w, --words            print the word counts
+              --help     display this help and exit
+              --version  output version information and exit
+
+        GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+        Report any translation bugs to <https://translationproject.org/team/>
+        Full documentation <https://www.gnu.org/software/coreutils/wc>
+        or available locally via: info '(coreutils) wc invocation'
+    ");
 }
