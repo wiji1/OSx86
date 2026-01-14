@@ -50,8 +50,6 @@ fn main() {
         parsed_args.char_modifiers.into_iter().map(|s| s.to_string())
     );
 
-
-
     for modifier in combined_modifiers {
 
         match modifier {
