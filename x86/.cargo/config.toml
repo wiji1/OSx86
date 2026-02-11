@@ -4,3 +4,6 @@ json-target-spec = true
 
 [build]
 target = "x86_64-osirs.json"
+
+[target.'cfg(target_os = "none")']
+runner = "bootimage runner"
