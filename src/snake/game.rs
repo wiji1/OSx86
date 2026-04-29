@@ -179,6 +179,7 @@ fn start_game() {
                 guard.as_ref().map(|s| s.current_length.saturating_sub(3)).unwrap_or(0)
             };
 
+            *GAME_OVER_CHOICE.lock() = None;
             draw_game_over_screen(score);
             keyboard::set_key_handler(game_over_key_handler);
 
