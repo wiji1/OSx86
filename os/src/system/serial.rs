@@ -32,10 +32,10 @@ impl Color {
 #[macro_export]
 macro_rules! serial_print {
     ($color:path, $($arg:tt)*) => {
-        $crate::serial::_print(format_args!($($arg)*), Some($color));
+        $crate::system::serial::_print(format_args!($($arg)*), Some($color));
     };
     ($($arg:tt)*) => {
-        $crate::serial::_print(format_args!($($arg)*), None);
+        $crate::system::serial::_print(format_args!($($arg)*), None);
     };
 }
 

@@ -1,7 +1,6 @@
 #![allow(static_mut_refs)]
 
 use x86_64::structures::idt::PageFaultErrorCode;
-use crate::print;
 use core::ptr::addr_of_mut;
 use pc_keyboard::layouts;
 use spin::Mutex;
@@ -16,7 +15,7 @@ pub fn init_idt() {
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.double_fault
             .set_handler_fn(double_fault_handler)
-            .set_stack_index(crate::gdt::DOUBLE_FAULT_IST_INDEX as u16);
+            .set_stack_index(crate::system::gdt::DOUBLE_FAULT_IST_INDEX as u16);
         idt.page_fault.set_handler_fn(page_fault_handler);
 
         idt.load();
@@ -40,11 +39,12 @@ extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame,
 }
 
 extern "x86-interrupt" fn timer_handler (_stack_frame: InterruptStackFrame) {
+    crate::system::timer::handle_tick();
     unsafe { PICS.notify_end_of_interrupt(InterruptIndex::Timer as u8) };
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1};
+    use pc_keyboard::{HandleControl, Keyboard, ScancodeSet1};
     use x86_64::instructions::port::Port;
 
     static KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
@@ -56,10 +56,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     let scancode: u8 = unsafe { port.read() };
     if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
         if let Some(key) = keyboard.process_keyevent(key_event) {
-            match key {
-                DecodedKey::Unicode(character) => print!("{}", character),
-                DecodedKey::RawKey(key) => print!("{:?}", key),
-            }
+            crate::system::keyboard::handle_key(key);
         }
     }
 

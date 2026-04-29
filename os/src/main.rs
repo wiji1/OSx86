@@ -6,37 +6,38 @@
 #![reexport_test_harness_main = "test_main"]
 extern crate alloc;
 
-use alloc::boxed::Box;
-
-mod vga;
-mod serial;
-
-#[cfg(test)]
-mod exit;
-mod interrupts;
-mod gdt;
-mod memory;
-mod allocator;
+mod system;
+mod snake;
+mod menu;
+mod apps;
 
 #[unsafe(no_mangle)]
 pub fn _start(boot_info: &'static bootloader::BootInfo) -> ! {
-    interrupts::init_idt();
-    gdt::init_gdt();
+    system::interrupts::init_idt();
+    system::gdt::init_gdt();
 
     let offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(offset) };
-    let mut frame_allocator = unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
-    allocator::init_heap(&mut mapper, &mut frame_allocator).unwrap();
+    let mut mapper = unsafe { system::memory::init(offset) };
+    let mut frame_allocator = unsafe { system::memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+    system::allocator::init_heap(&mut mapper, &mut frame_allocator).unwrap();
 
-    clear!();
+    system::vga::set_text_mode_80x25();
 
-    let b = Box::new(371);
-    println!("heap: {:?}", b);
+    static SNAKE_APP: snake::game::SnakeGame = snake::game::SnakeGame;
+    static HELLO_APP: apps::HelloWorldApp = apps::HelloWorldApp;
+    static INFO_APP: apps::SystemInfoApp = apps::SystemInfoApp;
 
-    #[cfg(test)]
-    test_main();
+    static MENU_ITEMS: &[&dyn menu::Application] = &[
+        &SNAKE_APP,
+        &HELLO_APP,
+        &INFO_APP,
+    ];
 
-    halt()
+    let main_menu = menu::Menu::new("Select an Application", MENU_ITEMS);
+
+    loop {
+        main_menu.run();
+    }
 }
 
 pub fn halt() -> ! {
@@ -46,11 +47,11 @@ pub fn halt() -> ! {
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     println!("{}", _info);
-    serial_println!(serial::Color::Red, "[PANIC] {}", _info);
+    serial_println!(system::serial::Color::Red, "[PANIC] {}", _info);
 
     #[cfg(test)]
     {
-        exit::exit_qemu(exit::QemuExitCode::Failed);
+        system::exit::exit_qemu(system::exit::QemuExitCode::Failed);
     }
 
     #[cfg(not(test))]
@@ -59,20 +60,10 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
-    serial_println!(serial::Color::Cyan, "Running {} tests", tests.len());
+    serial_println!(system::serial::Color::Cyan, "Running {} tests", tests.len());
     for test in tests {
         test();
     }
-    serial_println!(serial::Color::Green, "All tests passed!");
-    exit::exit_qemu(exit::QemuExitCode::Success);
-}
-
-#[test_case]
-fn hi() {
-    serial_println!(serial::Color::Green, "test hi... ok");
-}
-
-#[test_case]
-fn bye() {
-    serial_println!(serial::Color::Green, "test bye... ok");
+    serial_println!(system::serial::Color::Green, "All tests passed!");
+    system::exit::exit_qemu(system::exit::QemuExitCode::Success);
 }
